@@ -1,0 +1,175 @@
+---
+description: Quy tắc cho video Manim bài giảng lý thuyết (Định nghĩa / Định lí / Nhận xét). Áp dụng cho mọi môn toán, dùng kèm manim-global.mdc.
+globs: **/theory/**/*.py
+alwaysApply: false
+---
+
+# Manim Theory – Quy tắc bài giảng lý thuyết
+
+> Bổ sung cho `manim-global.mdc`. Không lặp lại TeX template, voiceover, màu token.
+
+## 1. Cấu trúc class
+
+```python
+from manim_helpers import make_gtts_service
+
+class TenBai(VoiceoverScene):
+    def construct(self):
+        self.set_speech_service(make_gtts_service())
+        self.scene00_intro()           # optional, 20–30s
+        self.scene01_dinhNghia()
+        self.scene02_dinhLi()
+        self.scene03_nhanXet()
+```
+
+- Dòng đầu `construct()`: `self.set_speech_service(make_gtts_service())` — không dùng `GTTSService(...)` trực tiếp.
+- Tốc độ đọc toàn project: chỉnh `VOICEOVER_GLOBAL_SPEED` trong `manim_helpers/voiceover_config.py` (xem `manim-global.mdc` mục 2).
+- Tên method: `sceneNN_<tênMục>` — `scene01_dinhNghia`, `scene02_dinhLi`, `scene03_heQua`
+- **Cấm**: `scene01_chungMinhCauA`, `scene02_baiToan`, `scene_CM*`
+
+## 2. Block types hợp lệ (7 loại)
+
+`dinh_nghia` · `dinh_li` · `he_qua` · `nhan_xet` · `chu_y` · `vi_du` · `bai_tap`
+
+## 3. Cấm trong file theory
+
+| Bị cấm                                          | Thay bằng                                      |
+|-------------------------------------------------|------------------------------------------------|
+| `ProofLine`, `ProofColumn`, `proof_accumulator` | `TheoryColumn` (xem `manim-theory-layout`)     |
+| `gt_vgroup`, `kl_vgroup`                        | `block_heading`, `body_group`                  |
+| `SurroundingRectangle` đpcm / kết quả CM        | Không đóng khung (hoặc chỉ highlight Indicate) |
+| Chuỗi `GT:`, `KL:`, `(đpcm)`                    | Không dùng                                     |
+
+## 4. Layout chuẩn
+
+```python
+# Tiêu đề bài — nền màu flush top, giữ xuyên suốt hoặc thu nhỏ sau scene00
+# make_lesson_title() từ manim_helpers — tạo VGroup(bg_rect, title_text)
+self.lesson_title = make_lesson_title(r"\textbf{BÀI X. TÊN BÀI}", viet_tex_template)
+# group flush top (to_edge(UP, buff=0.0)), has bg rectangle
+
+# section_heading — giữ xuyên suốt nếu spec khai báo section_heading
+self.section_heading = Tex(r"\textbf{I. KIẾN THỨC CẦN NHỚ}", tex_template=viet_tex_template, font_size=28)
+self.section_heading.next_to(self.lesson_title, DOWN, buff=0.35)
+self.section_heading.align_to([TEXT_LEFT_X, 0, 0], LEFT)
+
+# block_heading — neo dưới section_heading (KHÔNG dưới lesson_title) khi có section_heading
+block_heading = Tex(r"\textbf{1. Định nghĩa}", tex_template=viet_tex_template, font_size=32)
+block_heading.next_to(self.section_heading, DOWN, buff=0.25)
+block_heading.align_to([TEXT_LEFT_X, 0, 0], LEFT)
+# Không có section_heading → block_heading.next_to(self.lesson_title, DOWN, buff=0.35)
+# TEXT_LEFT_X = −6.5 → đúng lề trái, không bị flush với rìa frame
+
+# Cột text: width ~55% khi có hình, ~80% khi không có hình
+# FigurePanel: bên phải, width ~45% khi có hình
+```
+
+## 5. FigurePanel và figure lifecycle
+
+- Nếu scene **có hình**: `figure_group` bên phải; `FadeOut(figure_group)` cuối scene nếu scene sau dùng hình khác.
+- Nếu scene **không có hình**: text chiếm full width (tăng `font_size` lên 28–30).
+- Scene `nhan_xet` có thể có **2 hình nhỏ cạnh nhau** (`DualFigurePanel`) — không dùng hình đơn.
+- Không tạo `self.persistent_geom` — hình lý thuyết **không** giữ bắt buộc xuyên bài.
+- **`place_dual_figures` CHỈ cho `nhan_xet`/`chu_y` có 2 hình ví dụ ĐỘC LẬP** (VD: HCN và HV). Không dùng cho 2 hình liên quan cùng minh họa một khái niệm.
+- **Định nghĩa/Định lí với 2 hình liên quan** → `place_figure(VGroup(fig1, fig2).arrange(RIGHT, buff=0.3))` — KHÔNG dùng `place_dual_figures` (bị giới hạn `DUAL_FIG_MAX_W=1.55`, hình quá nhỏ).
+- **Sau `place_figure()`**: update tọa độ bằng `dot.get_center()` — **KHÔNG** dùng tọa độ hardcode cũ cho `AngleMarker` hoặc `GeometryEngine.register_point`. Tọa độ hardcode trở nên stale sau khi `place_figure` scale/move VGroup.
+
+## 6. Subject-specific figures
+
+| subject | Skill figure | Ghi chú |
+|---|---|---|
+| `geometry` | `theory-figure/geometry` | Bắt buộc đọc khi spec có `figure.type: geometry` hoặc `dual_geometry` |
+| `algebra` | — chưa có | Dùng `Axes`, `MathTex` cơ bản; KHÔNG dùng GeometryEngine |
+| `statistics` | — chưa có | Dùng `BarChart`, `Table` built-in Manim |
+| `trigonometry` | — chưa có | Dùng `Axes` + `ParametricFunction` cơ bản |
+
+## 7. Narration lý thuyết
+
+- Đọc tên mục: "Định nghĩa.", "Định lí.", "Nhận xét." — không đọc số "một.", "hai."
+- Không dùng: "ta chứng minh", "bây giờ chứng minh" → dùng "chúng ta thấy rằng", "điều này có nghĩa là"
+- Thuật ngữ in đậm đọc bình thường, không nhấn giọng
+- Đánh vần: "góc A cộng góc C bằng 180 độ" (không dùng ký hiệu trong voiceover)
+
+## 9. Quy tắc định dạng danh sách và đề mục đặc biệt
+
+| Ảnh SGK có nhãn | Heading hiển thị | Nội dung |
+|-----------------|------------------|----------|
+| (list item) | `-` (dash đầu dòng) | plain — KHÔNG dùng `$\bullet$` |
+| (sub-item) | `$\bullet$` (chấm tròn đặc) | plain — **KHÔNG** dùng `.` (dễ nhầm `\cdot`) |
+| `"Lưu ý"` | `(!) Lưu ý` | italic + `COLOR_WARNING` |
+| `"Chú ý"` | `(!) Chú ý` | italic + `COLOR_WARNING` |
+| `"Nhận xét"` | `(*) Nhận xét` | italic + `COLOR_WARNING` |
+| `"Ghi nhớ"` | `(*) Ghi nhớ` | italic + `COLOR_WARNING` |
+
+**Quy tắc:**
+- Prefix `(!)` / `(*)` ghép với **đúng nhãn gốc** từ ảnh SGK — không gộp nhiều nhãn với dấu `/`.
+- Body content dùng `\textit{...}` + `color=COLOR_WARNING` (`#BF360C`).
+- KHÔNG dùng `SurroundingRectangle` cho `(!)` / `(*)` — màu đỏ italic đã đủ nhấn mạnh.
+
+```python
+# Ví dụ cho (!) Chú ý / (!) Lưu ý
+block_heading = Tex(r"\textbf{(!) Chú ý}", tex_template=viet_tex_template, font_size=32)
+note = Tex(r"\textit{Nội dung lưu ý...}",
+           tex_template=viet_tex_template, font_size=26,
+           color=COLOR_WARNING)
+
+# Ví dụ cho (*) Nhận xét / (*) Ghi nhớ
+block_heading = Tex(r"\textbf{(*) Nhận xét}", tex_template=viet_tex_template, font_size=32)
+bullet = Tex(r"\textit{- Nội dung nhận xét...}",
+             tex_template=viet_tex_template, font_size=26,
+             color=COLOR_WARNING)
+
+# Sub-item text
+label = Tex(r"- \textbf{Tính chất giao hoán:}", tex_template=viet_tex_template)
+
+# Sub-item công thức — bullet tách biệt khỏi \cdot trong công thức
+formula = Tex(r"$\bullet$ $a \cdot b = b \cdot a$", tex_template=viet_tex_template)
+```
+
+**Anti-pattern:**
+- Cấm `. ` làm prefix sub-item khi công thức chứa `\cdot` — dùng `$\bullet$` thay thế
+- Cấm `$\bullet$` cho list item chính — dùng `-` (dash)
+
+---
+
+## 8. Anti-patterns phổ biến — lesson_title và block_heading
+
+### Vùng màn hình (ASCII)
+
+```
+┌──────────────────────────────────────────────┐  ← top edge
+│  lesson_title  (make_lesson_title, flush UP) │  row 0  ~0.6 units cao
+├──────────────────────────────────────────────┤
+│  section_heading (persistent, nếu spec có)   │  row 1
+├──────────────────────────────────────────────┤
+│  block_heading (next_to section_heading)     │  row 2
+│  ─────────────────────────────────────────── │
+│  body lines / formulas (TheoryColumn)        │  rows 3–N
+└──────────────────────────────────────────────┘
+```
+
+`to_corner(UL, buff=0.5)` đặt `block_heading` ở `y ≈ +3.5` — TRÙNG với `lesson_title` (`y ≈ +3.7`) → hai Mobject **chồng lên nhau**, lesson_title bị che.
+
+### Bảng anti-patterns
+
+| Bị cấm | Thay bằng |
+|--------|-----------|
+| `Tex(r"...", font_size=36).to_edge(UP, buff=0.4)` để tạo `lesson_title` | `make_lesson_title(r"...", viet_tex_template)` — import từ `manim_helpers` |
+| `block_heading.to_corner(UL, buff=0.5)` | hai dòng: `next_to(…, DOWN, buff=0.35)` + `align_to([TEXT_LEFT_X, 0, 0], LEFT)` |
+| `block_heading.next_to(self.lesson_title, DOWN, aligned_edge=LEFT, buff=0.35)` | hai dòng: `next_to(…, DOWN, buff=0.35)` + `align_to([TEXT_LEFT_X, 0, 0], LEFT)` |
+| `FadeOut(section_heading)` sau scene00 khi spec có `section_heading` | Giữ `self.section_heading` persistent; chỉ FadeOut cuối bài |
+| `block_heading.next_to(lesson_title)` khi có `section_heading` | `block_heading.next_to(section_heading, DOWN, buff=0.25)` |
+| Fallback `Tex(...).to_edge(UP, buff=0.4)` trong scene01+ | `make_lesson_title(r"...", viet_tex_template)` + `self.add(self.lesson_title)` |
+| `col.place(line, gap=BODY_GAP)` khi dòng đó đứng ngay trước công thức có `SurroundingRectangle` | `col.place(line, gap=FORMULA_GAP)` — tránh `box.top` đè lên dòng text (`BODY_GAP 0.16 < buff 0.18`) |
+
+### Import bắt buộc khi dùng make_lesson_title
+
+```python
+from manim_helpers import (
+    ...,
+    TheoryColumn,
+    TEXT_LEFT_X,         # ← bắt buộc cho block_heading alignment
+    make_lesson_title,   # ← bắt buộc
+    make_gtts_service,
+)
+```

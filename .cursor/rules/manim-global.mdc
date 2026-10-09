@@ -1,0 +1,257 @@
+---
+description: Chuẩn code chung cho mọi video Manim toán học tiếng Việt trong dự án này.
+globs: **/*.py
+alwaysApply: false
+---
+
+# Manim Global – Quy tắc chung cho video Manim toán học
+
+## 1. TeX Template chuẩn (bắt buộc cho mọi Tex/MathTex có tiếng Việt)
+
+Luôn khai báo `viet_tex_template` ở **module level** (trước class):
+
+```python
+from manim import *
+import numpy as np
+from manim_voiceover import VoiceoverScene
+from manim_helpers import make_gtts_service
+
+viet_tex_template = TexTemplate(
+    tex_compiler="xelatex",
+    output_format=".xdv",
+    preamble=r"""
+\usepackage{fontspec}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{vntex}
+\setmainfont{Times New Roman}
+"""
+)
+```
+
+### Quy tắc bắt buộc – tránh lỗi Unicode LaTeX
+
+> **LỖI PHỔ BIẾN**: `MathTex(r"... \text{ tại } ...")` gây `LaTeX Error: Unicode character ạ (U+1EA1)` vì `MathTex` mặc định dùng pdflatex, không hỗ trợ Unicode tiếng Việt.
+
+**Nguyên tắc**: Bất kỳ ký tự tiếng Việt nào (kể cả trong `\text{...}`) đều phải dùng `viet_tex_template`:
+
+```python
+# ✗ SAI – gây crash khi có dấu tiếng Việt trong \text{}
+MathTex(r"\triangle OAB \text{ vuông tại } B")
+
+# ✓ ĐÚNG – thêm tex_template
+MathTex(r"\triangle OAB \text{ vuông tại } B",
+        tex_template=viet_tex_template)
+
+# ✓ HOẶC dùng Tex thay MathTex
+Tex(r"$\triangle OAB$ vuông tại $B$",
+    tex_template=viet_tex_template)
+```
+
+**Danh sách từ tiếng Việt hay gặp trong `\text{}`** – tất cả đều phải có template:
+
+| Chuỗi                      | Ký tự Unicode bị lỗi   |
+|----------------------------|------------------------|
+| `\text{ tại }`             | `ạ`                    |
+| `\text{ vuông tại }`       | `ọ`, `ạ`               |
+| `\text{ nội tiếp}`         | `ộ`                    |
+| `\text{ cân tại }`         | `â`, `ạ`               |
+| `\text{(đpcm)}`            | `đ`                    |
+| `\text{(cùng chắn...)}`    | `ù`, `ắ`               |
+| `\text{ và }`              | `à`                    |
+| `\text{ chung}`            | (ASCII – an toàn)      |
+
+- Mọi `Tex(...)` hoặc `MathTex(...)` chứa tiếng Việt **phải** có `tex_template=viet_tex_template`.
+- `MathTex(...)` thuần công thức ASCII (không có `\text{...}` tiếng Việt) không cần template.
+
+## 2. Cấu trúc class
+
+```python
+class TenBaiToan(VoiceoverScene):
+    def construct(self):
+        self.set_speech_service(make_gtts_service())
+        self.scene01_introVaDeBai()
+        self.scene02_chienThuat()
+        self.scene03_chungMinhBuoc1()
+        # ...
+```
+
+- Kế thừa `VoiceoverScene`, **không** dùng `Scene` thuần.
+- Gọi `self.set_speech_service(make_gtts_service())` là dòng **đầu tiên** trong `construct()`.
+- **Không** import hay gọi `GTTSService(...)` trực tiếp trong file scene — dùng factory `make_gtts_service()` từ `manim_helpers`.
+- Mỗi scene là một **method riêng**, gọi tuần tự từ `construct()`.
+
+### Tốc độ voiceover (GTTS)
+
+- Chỉnh tốc độ **toàn project** tại `manim_helpers/voiceover_config.py` → hằng số `VOICEOVER_GLOBAL_SPEED` (`1.0` = bình thường; `1.25` ≈ nhanh hơn 25%, thời lượng voiceover ngắn hơn tương ứng).
+- `make_gtts_service()` tự áp dụng `VOICEOVER_GLOBAL_SPEED` và fallback ffmpeg khi máy thiếu SoX (`sox`/`soxi` trên PATH).
+- Override cho **một bài** (hiếm khi cần): `make_gtts_service(global_speed=1.0)`.
+- **Cấm** hardcode `global_speed=` trong file scene trừ khi spec yêu cầu rõ.
+
+## 3. Đặt tên scene method
+
+Pattern: `sceneNN_tenScene` (số thứ tự 2 chữ số + camelCase):
+
+```python
+def scene01_introVaDeBai(self): ...
+def scene02_chienThuatCauA(self): ...
+def scene03_chungMinhIEbangIC(self): ...
+```
+
+## 4. Chia sẻ state giữa các scene
+
+Lưu mọi Mobject cần dùng ở scene sau vào `self.*`:
+
+```python
+# Scene 1 tạo:
+self.diagram = diagram_elements.scale(0.8).shift(RIGHT * 4.0, DOWN * 1.0)
+self.dot_C = Dot(C, color=GREEN)
+self.gt_vgroup = VGroup(...)
+self.kl_vgroup = VGroup(...)
+
+# Scene 2 truy cập:
+C_pos = self.dot_C.get_center()
+self.play(FadeOut(self.gt_vgroup), FadeOut(self.kl_vgroup))
+```
+
+## 5. Layout chuẩn
+
+| Vùng          | Nội dung                               | Cách định vị                              |
+|---------------|----------------------------------------|-------------------------------------------|
+| Góc trên-trái | Tiêu đề scene, GT/KL, chứng minh       | `.to_corner(UL, buff=0.5)`                |
+| Phải màn hình | Hình vẽ hình học                       | `.shift(RIGHT * 4.0, DOWN * 1.0)`         |
+| Góc trên-phải | Kết luận cuối (nếu có đóng khung)       | `.to_corner(UR, buff=0.5)` (chỉ khi cần)  |
+
+- Hình vẽ luôn được `scale(0.8)` rồi shift sang phải.
+- Text chứng minh bố cục bên trái, dùng `.arrange(DOWN, aligned_edge=LEFT, buff=0.2)`.
+
+## 6. Voiceover – đồng bộ animation
+
+Wrap mọi animation quan trọng trong `with self.voiceover(...) as ov:`:
+
+```python
+with self.voiceover(text="Nội dung thuyết minh...") as ov:
+    self.play(AddTextLetterByLetter(title), run_time=ov.duration * 0.3)
+    self.play(Create(diagram), run_time=ov.duration * 0.6)
+    self.wait(ov.duration * 0.1)
+```
+
+- Dùng `run_time=ov.duration * 0.x` để chia thời gian animation.
+- Tổng các hệ số nhân `ov.duration` trong một block không vượt quá 1.0.
+- Dùng `self.wait(1)` giữa các ý để tạo nhịp.
+
+## 7. Đóng khung kết quả
+
+> **NGUYÊN TẮC**: Chỉ đóng khung khi bước chứng minh **thực sự dài và phức tạp**, cần nhấn mạnh để người xem ghi nhớ rằng điều đó đã được chứng minh. **Không** đóng khung mọi kết quả nhỏ giữa các ý — làm vậy gây thừa và tạo ra nhiều box chồng lên nhau trên màn hình.
+
+### Khi nào nên đóng khung
+
+| Nên đóng khung                                          | Không cần đóng khung                              |
+|---------------------------------------------------------|---------------------------------------------------|
+| Kết luận cuối cùng của bài (đpcm)                       | Kết quả trung gian nhỏ giữa các bước              |
+| Kết luận ý CM dài (≥ 3–4 bước suy luận)                 | Công thức vừa viết còn hiển thị rõ trên màn hình |
+| Kết quả cần được nhắc lại ở các ý sau                   | Mỗi dòng suy luận trong cùng một bước             |
+
+### Cách đóng khung đúng
+
+```python
+# Kết luận quan trọng giữa bài (ý dài, cần ghi nhớ) → GREEN
+box_key = SurroundingRectangle(key_result_mob, color="#2D6A2D", buff=0.2)
+self.play(Create(box_key))
+# Giữ nguyên vị trí hiện tại — KHÔNG di chuyển lên UR nếu còn chỗ đọc được
+
+# Kết luận cuối cùng (đpcm) → RED
+box_final = SurroundingRectangle(VGroup(final_eq, final_text), color=RED, buff=0.2)
+self.play(Create(box_final))
+```
+
+### Tránh chồng box
+
+- Mỗi scene chỉ nên có **tối đa 1 box** tồn tại đồng thời trên màn hình.
+- Nếu cần giữ kết quả cũ để tham chiếu, dùng `FadeOut(old_box)` trước khi tạo box mới.
+- **Không** tích lũy nhiều box ở góc UR qua nhiều scene liên tiếp.
+
+## 8. Dọn dẹp giữa các scene
+
+Luôn `FadeOut()` mọi thứ trước khi kết thúc scene (hoặc đầu scene tiếp theo):
+
+```python
+# Cách 1: FadeOut từng nhóm
+self.play(FadeOut(title), FadeOut(proof_group), FadeOut(temp_lines))
+
+# Cách 2: FadeOut một VGroup lớn
+clean_group = VGroup(title, proof_group, temp_lines)
+self.play(FadeOut(clean_group))
+```
+
+- Giữ lại `self.diagram` xuyên suốt video (không FadeOut).
+- Nếu có box kết quả, `FadeOut(box)` cùng với các thành phần khác khi kết thúc scene — **không** để box tích lũy qua nhiều scene.
+
+## 9. Helper function module-level
+
+Đặt helper functions **trước class**, không trong class:
+
+```python
+def line_intersection(line1_points, line2_points):
+    """Tính tọa độ giao điểm của hai đường thẳng."""
+    p1, p2 = line1_points
+    p3, p4 = line2_points
+    dx1, dy1 = p2[0] - p1[0], p2[1] - p1[1]
+    dx2, dy2 = p4[0] - p3[0], p4[1] - p3[1]
+    D = dx1 * dy2 - dy1 * dx2
+    if D == 0:
+        return None
+    t = ((p3[0] - p1[0]) * dy2 - (p3[1] - p1[1]) * dx2) / D
+    return np.array([p1[0] + t * dx1, p1[1] + t * dy1, 0])
+```
+
+## 10. Quy tắc animation
+
+| Tình huống                     | Animation nên dùng                    |
+|--------------------------------|---------------------------------------|
+| Hiện text / công thức mới      | `AddTextLetterByLetter(...)`          |
+| Hiện hình hình học             | `Create(...)`                         |
+| Nhấn mạnh quan trọng           | `Indicate(..., scale_factor=1.2)`     |
+| Biến đổi phương trình          | `TransformMatchingTex`                |
+| Sao chép để tạo kết quả mới    | `TransformFromCopy`                   |
+| Chuyển hoàn toàn sang dạng mới | `ReplacementTransform`                |
+| Ẩn đối tượng không cần thiết   | `FadeOut(...)`                        |
+| Hiện đối tượng mới vào         | `FadeIn(...)`                         |
+
+## 11. Bảng màu chuẩn cho nền sáng (`setup_scene_style`)
+
+Nếu dự án dùng nền sáng (`background_color = "#F5F1E8"`) và text mặc định tối (`#2C2C2C`), **không dùng** `WHITE`, `YELLOW`, `YELLOW_C`, `GREEN_C`, `GRAY` thuần – chúng gần như vô hình trên nền kem.
+
+### Palette nền sáng được khuyến nghị
+
+| Đối tượng              | Tránh           | Dùng thay                 |
+|------------------------|-----------------|---------------------------|
+| Đường tròn             | `BLUE_B` (nhạt) | `"#1565C0"`               |
+| Tâm O                  | `YELLOW`        | `"#E65100"` (cam đậm)     |
+| Tiếp điểm B, C         | `GREEN_C`       | `"#2D6A2D"` (xanh lá đậm) |
+| Điểm E, đường AD       | `YELLOW_C`      | `"#BF360C"` (cam cháy)    |
+| Điểm H, đường BD       | `WHITE`         | `"#37474F"` (xám đậm)     |
+| Bán kính OB, OC        | `GRAY`          | `"#546E7A"` (xanh xám)    |
+| Góc vuông (RightAngle) | `WHITE`         | `"#37474F"`               |
+| Đường BE               | `GREEN_B`       | `"#2E7D32"`               |
+| Highlight Indicate     | `YELLOW`        | `"#E65100"`               |
+| Box tạm thời           | `YELLOW`        | `"#E65100"`               |
+
+### Ví dụ `setup_scene_style` với màu đúng
+
+```python
+def setup_scene_style(self):
+    Mobject.set_default(color="#2C2C2C")
+    Tex.set_default(color="#2C2C2C")
+    MathTex.set_default(color="#2C2C2C")
+    self.camera.background_color = "#F5F1E8"
+    grid = NumberPlane(
+        x_range=[-8, 8, 1], y_range=[-5, 5, 1],
+        axis_config={"stroke_width": 0},
+        background_line_style={"stroke_color": "#D6D0C4",
+                               "stroke_width": 1, "stroke_opacity": 0.4},
+    )
+    grid.set_z_index(-10)
+    self.add(grid)
+```
+
